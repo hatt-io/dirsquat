@@ -140,7 +140,7 @@ func TestNamesModeWorks(t *testing.T) {
 	}
 }
 
-func TestCountModeIsQuietWhenNothingMatches(t *testing.T) {
+func TestCountModeConfirmsWhenNothingMatches(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, dir, "new.txt", testNow.AddDate(0, 0, -2))
 
@@ -151,8 +151,29 @@ func TestCountModeIsQuietWhenNothingMatches(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d with stderr %q", code, stderr.String())
 	}
-	if stdout.Len() != 0 {
-		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	want := "No files older than 7 days found.\n"
+	if stdout.String() != want {
+		t.Fatalf("unexpected stdout:\nwant %q\ngot  %q", want, stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestNamesModeConfirmsWhenNothingMatches(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "new.txt", testNow.AddDate(0, 0, -2))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := run([]string{"--days", "7", "--names", dir}, &stdout, &stderr, testNow)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d with stderr %q", code, stderr.String())
+	}
+	want := "No files older than 7 days found.\n"
+	if stdout.String() != want {
+		t.Fatalf("unexpected stdout:\nwant %q\ngot  %q", want, stdout.String())
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
@@ -169,8 +190,9 @@ func TestMissingDirectoryHandlingWorks(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d", code)
 	}
-	if stdout.Len() != 0 {
-		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	want := "No files older than 7 days found.\n"
+	if stdout.String() != want {
+		t.Fatalf("unexpected stdout:\nwant %q\ngot  %q", want, stdout.String())
 	}
 	if !strings.Contains(stderr.String(), "warning: "+missing) {
 		t.Fatalf("expected warning for missing directory, got %q", stderr.String())
@@ -201,8 +223,9 @@ func TestUnreadableDirectoryHandlingWorks(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d", code)
 	}
-	if stdout.Len() != 0 {
-		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	want := "No files older than 7 days found.\n"
+	if stdout.String() != want {
+		t.Fatalf("unexpected stdout:\nwant %q\ngot  %q", want, stdout.String())
 	}
 	if !strings.Contains(stderr.String(), "warning: "+unreadable) {
 		t.Fatalf("expected warning for unreadable directory, got %q", stderr.String())

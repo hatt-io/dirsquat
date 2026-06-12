@@ -67,6 +67,11 @@ func run(args []string, stdout, stderr io.Writer, now time.Time) int {
 		fmt.Fprintf(stderr, "%s: warning: %s: %v\n", appName, warning.Path, warning.Err)
 	}
 
+	if totalMatches(result.Roots) == 0 {
+		writeNoMatches(stdout, opts.days)
+		return 0
+	}
+
 	switch opts.mode {
 	case modeNames:
 		for _, file := range result.Files {
@@ -168,6 +173,9 @@ Defaults:
   --days %d
   DIR: ~/Downloads
 
+Output:
+  Prints a confirmation line when no files match.
+
 Options:
   --days N             report files older than N days
   --count              print one count line per directory with matches
@@ -196,6 +204,23 @@ func writeCounts(w io.Writer, roots []RootResult, days int) {
 
 		fmt.Fprintf(w, "%s: %d %s older than %d %s\n", root.Path, root.Count, fileWord, days, dayWord)
 	}
+}
+
+func writeNoMatches(w io.Writer, days int) {
+	dayWord := "days"
+	if days == 1 {
+		dayWord = "day"
+	}
+
+	fmt.Fprintf(w, "No files older than %d %s found.\n", days, dayWord)
+}
+
+func totalMatches(roots []RootResult) int {
+	total := 0
+	for _, root := range roots {
+		total += root.Count
+	}
+	return total
 }
 
 func isHiddenName(name string) bool {

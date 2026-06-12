@@ -44,8 +44,9 @@ func TestExplicitDaysWithDefaultDownloads(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d with stderr %q", code, stderr.String())
 	}
-	if stdout.Len() != 0 {
-		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	want := "No files older than 10 days found.\n"
+	if stdout.String() != want {
+		t.Fatalf("unexpected stdout:\nwant %q\ngot  %q", want, stdout.String())
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())

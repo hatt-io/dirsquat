@@ -2,7 +2,7 @@
 
 `dirsquat` is a small Go command-line tool for macOS and Linux. It is designed to run from `.zshrc`, `.bashrc`, or another shell startup file and report visible files that are older than a configured number of days.
 
-By default, it scans `~/Downloads` and reports files older than 7 days. It scans recursively. When there is nothing to report, it prints nothing.
+By default, it scans `~/Downloads` and reports files older than 7 days. It scans recursively. When no files match, it prints a confirmation line.
 
 ## What It Never Does
 
@@ -72,8 +72,14 @@ dirsquat --days 7 --count ~/Downloads ~/Desktop
 Example output:
 
 ```text
-/Users/you/Downloads: 12 files older than 7 days
-/Users/you/Desktop: 2 files older than 7 days
+/path/to/Downloads: 12 files older than 7 days
+/path/to/Desktop: 2 files older than 7 days
+```
+
+If no files match:
+
+```text
+No files older than 7 days found.
 ```
 
 Use names mode to print matching file paths, one per line:
@@ -86,8 +92,8 @@ dirsquat --days 7 --names ~/Downloads ~/Desktop
 Example output:
 
 ```text
-/Users/you/Downloads/report.pdf
-/Users/you/Desktop/archive.zip
+/path/to/Downloads/report.pdf
+/path/to/Desktop/archive.zip
 ```
 
 Paths with spaces work when passed as normal shell arguments:
