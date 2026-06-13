@@ -19,8 +19,9 @@ type ScanResult struct {
 }
 
 type RootResult struct {
-	Path  string
-	Count int
+	Path          string
+	Count         int
+	OldestModTime time.Time
 }
 
 type FileMatch struct {
@@ -143,6 +144,9 @@ func (s Scanner) scanDir(dir string, cutoff time.Time, rootResult *RootResult, r
 
 		if info.ModTime().Before(cutoff) {
 			rootResult.Count++
+			if rootResult.OldestModTime.IsZero() || info.ModTime().Before(rootResult.OldestModTime) {
+				rootResult.OldestModTime = info.ModTime()
+			}
 			result.Files = append(result.Files, FileMatch{
 				Root:    rootResult.Path,
 				Path:    child,

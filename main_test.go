@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,10 +21,8 @@ func TestNoArgsUseDefaultDaysAndDownloads(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d with stderr %q", code, stderr.String())
 	}
-	want := fmt.Sprintf("%s: 1 file older than 7 days\n", downloads)
-	if stdout.String() != want {
-		t.Fatalf("unexpected stdout:\nwant %q\ngot  %q", want, stdout.String())
-	}
+	requireOutputContains(t, stdout.String(), "D I R S Q U A T", "FOUND", "FILES", "OLDEST FILE AGE", "1", "8 days", filepath.Base(downloads))
+	requireOutputExcludes(t, stdout.String(), "threshold", "OLDER FILES")
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
@@ -44,10 +41,8 @@ func TestExplicitDaysWithDefaultDownloads(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d with stderr %q", code, stderr.String())
 	}
-	want := "No files older than 10 days found.\n"
-	if stdout.String() != want {
-		t.Fatalf("unexpected stdout:\nwant %q\ngot  %q", want, stdout.String())
-	}
+	requireOutputContains(t, stdout.String(), "D I R S Q U A T", "CLEAR", "No files need attention.")
+	requireOutputExcludes(t, stdout.String(), "threshold", "OLDER FILES")
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
@@ -64,10 +59,8 @@ func TestExplicitDirectoryUsesDefaultDays(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d with stderr %q", code, stderr.String())
 	}
-	want := fmt.Sprintf("%s: 1 file older than 7 days\n", dir)
-	if stdout.String() != want {
-		t.Fatalf("unexpected stdout:\nwant %q\ngot  %q", want, stdout.String())
-	}
+	requireOutputContains(t, stdout.String(), "D I R S Q U A T", "FOUND", "FILES", "OLDEST FILE AGE", "1", "8 days", filepath.Base(dir))
+	requireOutputExcludes(t, stdout.String(), "threshold", "OLDER FILES")
 }
 
 func TestHelpWorks(t *testing.T) {
@@ -82,7 +75,7 @@ func TestHelpWorks(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
-	for _, want := range []string{"Usage:", "Defaults:", "--days 7", "DIR: ~/Downloads", "--count", "--names", "--follow-symlinks", "--help", "--version"} {
+	for _, want := range []string{"D I R S Q U A T", "HELP", "USAGE", "DEFAULTS", "days       7", "directory  ~/Downloads", "CLEAR", "FOUND", "WARN", "ERROR", "--count", "--names", "--follow-symlinks", "--help", "--version"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("help output missing %q:\n%s", want, stdout.String())
 		}
@@ -98,9 +91,7 @@ func TestVersionWorks(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d", code)
 	}
-	if stdout.String() != appName+" "+version+"\n" {
-		t.Fatalf("unexpected version output %q", stdout.String())
-	}
+	requireOutputContains(t, stdout.String(), "D I R S Q U A T", "VERSION", version)
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
@@ -150,9 +141,29 @@ func TestArgumentErrorsFailClearly(t *testing.T) {
 			if !strings.Contains(stderr.String(), tt.want) {
 				t.Fatalf("stderr missing %q:\n%s", tt.want, stderr.String())
 			}
-			if !strings.Contains(stderr.String(), "Try 'dirsquat --help' for usage.") {
+			if !strings.Contains(stderr.String(), "NEXT") || !strings.Contains(stderr.String(), "dirsquat --help") {
 				t.Fatalf("stderr missing help hint:\n%s", stderr.String())
 			}
 		})
+	}
+}
+
+func requireOutputContains(t *testing.T, output string, want ...string) {
+	t.Helper()
+
+	for _, item := range want {
+		if !strings.Contains(output, item) {
+			t.Fatalf("output missing %q:\n%s", item, output)
+		}
+	}
+}
+
+func requireOutputExcludes(t *testing.T, output string, unwanted ...string) {
+	t.Helper()
+
+	for _, item := range unwanted {
+		if strings.Contains(output, item) {
+			t.Fatalf("output should not contain %q:\n%s", item, output)
+		}
 	}
 }

@@ -10,11 +10,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
-	appName     = "dirsquat"
-	defaultDays = 7
+	appName      = "dirsquat"
+	defaultDays  = 7
+	cardMinWidth = 60
+	cardMaxWidth = 76
+	pathMaxWidth = 54
 )
 
 var version = "0.1.0"
@@ -42,8 +46,7 @@ func main() {
 func run(args []string, stdout, stderr io.Writer, now time.Time) int {
 	opts, err := parseArgs(args)
 	if err != nil {
-		fmt.Fprintf(stderr, "%s: %v\n", appName, err)
-		fmt.Fprintf(stderr, "Try '%s --help' for usage.\n", appName)
+		writeError(stderr, err)
 		return 2
 	}
 
@@ -53,7 +56,7 @@ func run(args []string, stdout, stderr io.Writer, now time.Time) int {
 	}
 
 	if opts.version {
-		fmt.Fprintf(stdout, "%s %s\n", appName, version)
+		writeVersion(stdout)
 		return 0
 	}
 
@@ -63,22 +66,20 @@ func run(args []string, stdout, stderr io.Writer, now time.Time) int {
 	}
 	result := scanner.Scan(opts.roots, opts.days)
 
-	for _, warning := range result.Warnings {
-		fmt.Fprintf(stderr, "%s: warning: %s: %v\n", appName, warning.Path, warning.Err)
+	if len(result.Warnings) > 0 {
+		writeWarnings(stderr, result.Warnings)
 	}
 
-	if totalMatches(result.Roots) == 0 {
-		writeNoMatches(stdout, opts.days)
+	if totalOlderFiles(result.Roots) == 0 {
+		writeClear(stdout)
 		return 0
 	}
 
 	switch opts.mode {
 	case modeNames:
-		for _, file := range result.Files {
-			fmt.Fprintln(stdout, file.Path)
-		}
+		writeNames(stdout, result.Files, now)
 	default:
-		writeCounts(stdout, result.Roots, opts.days)
+		writeCounts(stdout, result.Roots, now)
 	}
 
 	return 0
@@ -164,58 +165,252 @@ func defaultDownloadsDir() (string, error) {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintf(w, `%s reports visible files older than a configured number of days.
-
-Usage:
-  %s [--days N] [--count|--names] [--follow-symlinks] [DIR...]
-
-Defaults:
-  --days %d
-  DIR: ~/Downloads
-
-Output:
-  Prints a confirmation line when no files match.
-
-Options:
-  --days N             report files older than N days
-  --count              print one count line per directory with matches
-  --names              print matching file paths, one per line
-  --follow-symlinks    enter symlinked directories
-  --help               show this help
-  --version            show version
-`, appName, appName, defaultDays)
+	writeCard(w, "HELP", "visible-file age report · report only", [][]string{
+		{
+			"USAGE",
+			"  dirsquat [--days N] [--count|--names] [--follow-symlinks] [DIR...]",
+		},
+		{
+			"DEFAULTS",
+			fmt.Sprintf("  days       %d", defaultDays),
+			"  directory  ~/Downloads",
+			"  mode       count",
+		},
+		{
+			"STATES",
+			"  CLEAR   no older files found",
+			"  FOUND   older files found",
+			"  WARN    scan problem; command continues",
+			"  ERROR   argument problem; command exits",
+		},
+		{
+			"OPTIONS",
+			"  --days N             report files older than N days",
+			"  --count              show counts and oldest age by directory",
+			"  --names              show file paths and ages",
+			"  --follow-symlinks    enter symlinked directories",
+			"  --help               show this help",
+			"  --version            show version",
+		},
+	})
 }
 
-func writeCounts(w io.Writer, roots []RootResult, days int) {
+func writeCounts(w io.Writer, roots []RootResult, now time.Time) {
+	countWidth := 0
+	ageWidth := 0
+	for _, root := range roots {
+		if root.Count > 0 {
+			countWidth = maxInt(countWidth, runeLen(strconv.Itoa(root.Count)))
+			ageWidth = maxInt(ageWidth, runeLen(ageSince(now, root.OldestModTime)))
+		}
+	}
+	countWidth = maxInt(countWidth, runeLen("FILES"))
+	ageWidth = maxInt(ageWidth, runeLen("OLDEST FILE AGE"))
+
+	rows := make([]string, 0, len(roots)+1)
+	rows = append(rows, fmt.Sprintf("%s  %s  DIRECTORY",
+		padRight("FILES", countWidth),
+		padRight("OLDEST FILE AGE", ageWidth),
+	))
 	for _, root := range roots {
 		if root.Count == 0 {
 			continue
 		}
-
-		fileWord := "files"
-		if root.Count == 1 {
-			fileWord = "file"
-		}
-
-		dayWord := "days"
-		if days == 1 {
-			dayWord = "day"
-		}
-
-		fmt.Fprintf(w, "%s: %d %s older than %d %s\n", root.Path, root.Count, fileWord, days, dayWord)
+		rows = append(rows, fmt.Sprintf("%s  %s  %s",
+			padRight(strconv.Itoa(root.Count), countWidth),
+			padRight(ageSince(now, root.OldestModTime), ageWidth),
+			displayPath(root.Path),
+		))
 	}
+
+	writeCard(w, "FOUND", "", [][]string{rows})
 }
 
-func writeNoMatches(w io.Writer, days int) {
-	dayWord := "days"
+func writeNames(w io.Writer, files []FileMatch, now time.Time) {
+	ageWidth := 0
+	for _, file := range files {
+		ageWidth = maxInt(ageWidth, runeLen(ageSince(now, file.ModTime)))
+	}
+	ageWidth = maxInt(ageWidth, runeLen("FILE AGE"))
+
+	rows := make([]string, 0, len(files)+1)
+	rows = append(rows, fmt.Sprintf("%s  FILE", padRight("FILE AGE", ageWidth)))
+	for _, file := range files {
+		rows = append(rows, fmt.Sprintf("%s  %s",
+			padRight(ageSince(now, file.ModTime), ageWidth),
+			displayPath(file.Path),
+		))
+	}
+
+	writeCard(w, "FOUND", "", [][]string{rows})
+}
+
+func writeClear(w io.Writer) {
+	writeCard(w, "CLEAR", "", [][]string{
+		{
+			"No files need attention.",
+		},
+	})
+}
+
+func writeWarnings(w io.Writer, warnings []ScanWarning) {
+	summary := []string{
+		"ISSUES",
+		fmt.Sprintf("    %d", len(warnings)),
+		"Scan continues after each issue.",
+	}
+
+	rows := make([]string, 0, len(warnings))
+	for _, warning := range warnings {
+		rows = append(rows, displayPath(warning.Path))
+		rows = append(rows, "  "+warning.Err.Error())
+	}
+
+	writeCard(w, "WARN", "scan completed with warnings", [][]string{summary, append([]string{"DETAILS"}, rows...)})
+}
+
+func writeError(w io.Writer, err error) {
+	writeCard(w, "ERROR", "argument problem", [][]string{
+		{
+			"ISSUE",
+			"  " + err.Error(),
+		},
+		{
+			"NEXT",
+			"  dirsquat --help",
+		},
+	})
+}
+
+func writeVersion(w io.Writer) {
+	writeCard(w, "VERSION", "release information", [][]string{
+		{
+			"VERSION",
+			"  " + version,
+		},
+	})
+}
+
+func writeCard(w io.Writer, state string, subtitle string, sections [][]string) {
+	brand := "D I R S Q U A T"
+	width := runeLen(brand) + runeLen(state) + 4
+	if subtitle != "" {
+		width = maxInt(width, runeLen(subtitle))
+	}
+	for _, section := range sections {
+		for _, line := range section {
+			width = maxInt(width, runeLen(line))
+		}
+	}
+	width = maxInt(width, cardMinWidth)
+	width = minInt(width, cardMaxWidth)
+
+	header := brand + strings.Repeat(" ", width-runeLen(brand)-runeLen(state)) + state
+
+	fmt.Fprintf(w, "┏%s┓\n", strings.Repeat("━", width+2))
+	writeCardLine(w, header, width)
+	if subtitle != "" {
+		writeCardLine(w, subtitle, width)
+	}
+	fmt.Fprintf(w, "┣%s┫\n", strings.Repeat("━", width+2))
+	for i, section := range sections {
+		if i > 0 {
+			fmt.Fprintf(w, "┣%s┫\n", strings.Repeat("━", width+2))
+		}
+		for _, line := range section {
+			writeCardLine(w, line, width)
+		}
+	}
+	fmt.Fprintf(w, "┗%s┛\n", strings.Repeat("━", width+2))
+}
+
+func writeCardLine(w io.Writer, line string, width int) {
+	line = fitText(line, width)
+	fmt.Fprintf(w, "┃ %s ┃\n", padRight(line, width))
+}
+
+func ageSince(now time.Time, modTime time.Time) string {
+	if modTime.IsZero() {
+		return "unknown"
+	}
+
+	days := int(now.Sub(modTime).Hours() / 24)
+	if days < 0 {
+		days = 0
+	}
+	if days == 0 {
+		return "less than 1 day"
+	}
 	if days == 1 {
-		dayWord = "day"
+		return "1 day"
+	}
+	if days < 60 {
+		return fmt.Sprintf("%d days", days)
 	}
 
-	fmt.Fprintf(w, "No files older than %d %s found.\n", days, dayWord)
+	months := days / 30
+	remainingDays := days % 30
+	if days < 365 {
+		if remainingDays == 0 {
+			return fmt.Sprintf("%d months", months)
+		}
+		return fmt.Sprintf("%d months %d days", months, remainingDays)
+	}
+
+	years := days / 365
+	remainingDays = days % 365
+	if remainingDays == 0 {
+		return fmt.Sprintf("%d years", years)
+	}
+	return fmt.Sprintf("%d years %d days", years, remainingDays)
 }
 
-func totalMatches(roots []RootResult) int {
+func displayPath(path string) string {
+	return fitText(path, pathMaxWidth)
+}
+
+func fitText(value string, width int) string {
+	if runeLen(value) <= width {
+		return value
+	}
+	if width <= 1 {
+		return strings.Repeat("…", maxInt(width, 0))
+	}
+
+	runes := []rune(value)
+	keep := width - 1
+	left := keep / 2
+	right := keep - left
+	return string(runes[:left]) + "…" + string(runes[len(runes)-right:])
+}
+
+func padRight(value string, width int) string {
+	padding := width - runeLen(value)
+	if padding <= 0 {
+		return value
+	}
+	return value + strings.Repeat(" ", padding)
+}
+
+func runeLen(value string) int {
+	return utf8.RuneCountInString(value)
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func totalOlderFiles(roots []RootResult) int {
 	total := 0
 	for _, root := range roots {
 		total += root.Count

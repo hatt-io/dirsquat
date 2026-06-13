@@ -2,11 +2,9 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 )
@@ -112,10 +110,8 @@ func TestCountModeWorks(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d with stderr %q", code, stderr.String())
 	}
-	want := fmt.Sprintf("%s: 2 files older than 7 days\n", dir)
-	if stdout.String() != want {
-		t.Fatalf("unexpected stdout:\nwant %q\ngot  %q", want, stdout.String())
-	}
+	requireOutputContains(t, stdout.String(), "D I R S Q U A T", "FOUND", "FILES", "OLDEST FILE AGE", "2", "9 days", filepath.Base(dir))
+	requireOutputExcludes(t, stdout.String(), "threshold", "OLDER FILES", "DIRECTORIES", "2 files")
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
@@ -132,15 +128,14 @@ func TestNamesModeWorks(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d with stderr %q", code, stderr.String())
 	}
-	if stdout.String() != old+"\n" {
-		t.Fatalf("unexpected stdout %q", stdout.String())
-	}
+	requireOutputContains(t, stdout.String(), "D I R S Q U A T", "FOUND", "FILE AGE", "8 days", displayPath(old))
+	requireOutputExcludes(t, stdout.String(), "threshold", "OLDER FILES")
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
 }
 
-func TestCountModeConfirmsWhenNothingMatches(t *testing.T) {
+func TestCountModeConfirmsWhenNoOlderFiles(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, dir, "new.txt", testNow.AddDate(0, 0, -2))
 
@@ -151,16 +146,14 @@ func TestCountModeConfirmsWhenNothingMatches(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d with stderr %q", code, stderr.String())
 	}
-	want := "No files older than 7 days found.\n"
-	if stdout.String() != want {
-		t.Fatalf("unexpected stdout:\nwant %q\ngot  %q", want, stdout.String())
-	}
+	requireOutputContains(t, stdout.String(), "D I R S Q U A T", "CLEAR", "No files need attention.")
+	requireOutputExcludes(t, stdout.String(), "threshold", "OLDER FILES")
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
 }
 
-func TestNamesModeConfirmsWhenNothingMatches(t *testing.T) {
+func TestNamesModeConfirmsWhenNoOlderFiles(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, dir, "new.txt", testNow.AddDate(0, 0, -2))
 
@@ -171,10 +164,8 @@ func TestNamesModeConfirmsWhenNothingMatches(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d with stderr %q", code, stderr.String())
 	}
-	want := "No files older than 7 days found.\n"
-	if stdout.String() != want {
-		t.Fatalf("unexpected stdout:\nwant %q\ngot  %q", want, stdout.String())
-	}
+	requireOutputContains(t, stdout.String(), "D I R S Q U A T", "CLEAR", "No files need attention.")
+	requireOutputExcludes(t, stdout.String(), "threshold", "OLDER FILES")
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
@@ -190,13 +181,9 @@ func TestMissingDirectoryHandlingWorks(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d", code)
 	}
-	want := "No files older than 7 days found.\n"
-	if stdout.String() != want {
-		t.Fatalf("unexpected stdout:\nwant %q\ngot  %q", want, stdout.String())
-	}
-	if !strings.Contains(stderr.String(), "warning: "+missing) {
-		t.Fatalf("expected warning for missing directory, got %q", stderr.String())
-	}
+	requireOutputContains(t, stdout.String(), "D I R S Q U A T", "CLEAR", "No files need attention.")
+	requireOutputExcludes(t, stdout.String(), "threshold", "OLDER FILES")
+	requireOutputContains(t, stderr.String(), "D I R S Q U A T", "WARN", "ISSUES", "    1", displayPath(missing))
 }
 
 func TestUnreadableDirectoryHandlingWorks(t *testing.T) {
@@ -223,13 +210,9 @@ func TestUnreadableDirectoryHandlingWorks(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d", code)
 	}
-	want := "No files older than 7 days found.\n"
-	if stdout.String() != want {
-		t.Fatalf("unexpected stdout:\nwant %q\ngot  %q", want, stdout.String())
-	}
-	if !strings.Contains(stderr.String(), "warning: "+unreadable) {
-		t.Fatalf("expected warning for unreadable directory, got %q", stderr.String())
-	}
+	requireOutputContains(t, stdout.String(), "D I R S Q U A T", "CLEAR", "No files need attention.")
+	requireOutputExcludes(t, stdout.String(), "threshold", "OLDER FILES")
+	requireOutputContains(t, stderr.String(), "D I R S Q U A T", "WARN", "ISSUES", "    1", displayPath(unreadable))
 }
 
 func TestPathsWithSpacesWork(t *testing.T) {
@@ -244,9 +227,8 @@ func TestPathsWithSpacesWork(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d with stderr %q", code, stderr.String())
 	}
-	if stdout.String() != old+"\n" {
-		t.Fatalf("unexpected stdout %q", stdout.String())
-	}
+	requireOutputContains(t, stdout.String(), "D I R S Q U A T", "FOUND", "FILE AGE", "8 days", displayPath(old))
+	requireOutputExcludes(t, stdout.String(), "threshold", "OLDER FILES")
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
