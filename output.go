@@ -59,11 +59,12 @@ func writeScanResult(w io.Writer, result ScanResult, opts cliOptions, now time.T
 }
 
 func printUsage(w io.Writer) {
-	writeCard(w, "HELP", "visible-file age report · report only", [][]string{
+	writeCard(w, "HELP", "file age report", [][]string{
 		{
 			"USAGE",
 			"  dirsquat [--days N] [--count|--names] [--plain]",
 			"           [--follow-symlinks] [DIR...]",
+			"  dirsquat --setup",
 		},
 		{
 			"DEFAULTS",
@@ -84,6 +85,7 @@ func printUsage(w io.Writer) {
 			"  --count              show counts and oldest age by directory",
 			"  --names              show file paths and ages",
 			"  --plain              show tab-separated output for automation",
+			"  --setup              build a shell startup command",
 			"  --follow-symlinks    enter symlinked directories",
 			"  --help               show this help",
 			"  --version            show version",

@@ -75,7 +75,7 @@ func TestHelpWorks(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
-	for _, want := range []string{"D I R S Q U A T", "HELP", "USAGE", "DEFAULTS", "days       7", "directory  ~/Downloads", "CLEAR", "FOUND", "WARN", "ERROR", "--count", "--names", "--plain", "--follow-symlinks", "--help", "--version"} {
+	for _, want := range []string{"D I R S Q U A T", "HELP", "USAGE", "DEFAULTS", "days       7", "directory  ~/Downloads", "CLEAR", "FOUND", "WARN", "ERROR", "--count", "--names", "--plain", "--setup", "--follow-symlinks", "--help", "--version"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("help output missing %q:\n%s", want, stdout.String())
 		}

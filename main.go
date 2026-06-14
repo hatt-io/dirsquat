@@ -28,6 +28,7 @@ type cliOptions struct {
 	days           int
 	mode           outputMode
 	plain          bool
+	setup          bool
 	followSymlinks bool
 	help           bool
 	version        bool
@@ -35,10 +36,14 @@ type cliOptions struct {
 }
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, time.Now()))
+	os.Exit(runWithInput(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, time.Now()))
 }
 
 func run(args []string, stdout, stderr io.Writer, now time.Time) int {
+	return runWithInput(args, os.Stdin, stdout, stderr, now)
+}
+
+func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer, now time.Time) int {
 	opts, err := parseArgs(args)
 	if err != nil {
 		writeCLIError(stderr, err, opts.plain)
@@ -53,6 +58,10 @@ func run(args []string, stdout, stderr io.Writer, now time.Time) int {
 	if opts.version {
 		writeVersion(stdout)
 		return 0
+	}
+
+	if opts.setup {
+		return runSetup(stdin, stdout, stderr, opts)
 	}
 
 	scanner := Scanner{
@@ -82,6 +91,7 @@ func parseArgs(args []string) (cliOptions, error) {
 	fs.BoolVar(&count, "count", false, "print counts")
 	fs.BoolVar(&names, "names", false, "print file names")
 	fs.BoolVar(&opts.plain, "plain", false, "print tab-separated output")
+	fs.BoolVar(&opts.setup, "setup", false, "run interactive setup")
 	fs.BoolVar(&opts.followSymlinks, "follow-symlinks", false, "follow symlinked directories")
 	fs.BoolVar(&opts.help, "help", false, "show help")
 	fs.BoolVar(&opts.version, "version", false, "show version")

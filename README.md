@@ -1,26 +1,14 @@
 # dirsquat
 
-`dirsquat` reports visible files that are older than a chosen number of days. It is a small Go CLI for macOS and Linux, designed to run from `.zshrc`, `.bashrc`, or another shell startup file.
+`dirsquat` is a shell-startup reminder for old files. Run it from `.zshrc`, `.bashrc`, or another shell startup file and it reports files older than your cutoff.
 
-Default behavior:
+By default, it checks `~/Downloads` for files older than 7 days:
 
 ```sh
 dirsquat
 ```
 
-That is equivalent to:
-
-```sh
-dirsquat --days 7 ~/Downloads
-```
-
-Ages are based on file modification time, which is available on both macOS and Linux.
-
-## Safety
-
-`dirsquat` only reports. It never moves, deletes, renames, archives, modifies, opens, or touches files.
-
-It also does not run as a daemon, watch the filesystem, send desktop notifications, use a database, store state, read a config file, print JSON, or use color output.
+Ages are based on file modification time.
 
 ## Install
 
@@ -50,7 +38,7 @@ go build -ldflags="-X main.version=0.1.0" -o dirsquat .
 
 ## Quick Usage
 
-Scan the default directory with the default 7-day cutoff:
+Check `~/Downloads`:
 
 ```sh
 dirsquat
@@ -68,10 +56,32 @@ Use a different day cutoff:
 dirsquat --days 14 ~/Downloads ~/Desktop
 ```
 
-Paths with spaces work as normal shell arguments:
+Quote paths with spaces:
 
 ```sh
 dirsquat --days 14 --names "$HOME/Project Notes"
+```
+
+## Setup Wizard
+
+Use `--setup` to build a shell startup command interactively:
+
+```sh
+dirsquat --setup
+```
+
+Setup prompts for:
+
+- directories to scan
+- day cutoff
+- count mode or names mode
+- whether to follow symlinked directories
+- whether to use plain output for scripts or agents
+
+It prints a command you can add to `.zshrc` or `.bashrc`:
+
+```sh
+dirsquat --days 7 --count "$HOME/Downloads" "$HOME/Desktop"
 ```
 
 ## Human Output
@@ -108,7 +118,7 @@ dirsquat --names ~/Downloads ~/Desktop
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
 
-When no older files are found, human output confirms that clearly:
+Clear output:
 
 ```text
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
@@ -120,7 +130,7 @@ When no older files are found, human output confirms that clearly:
 
 ## Automation And Agents
 
-Use `--plain` when another program or AI agent needs to consume the output. Plain mode is tab-separated, uses exact paths, and never shortens paths with an ellipsis.
+Use `--plain` when another program or AI agent needs exact output. Plain mode is tab-separated and never shortens paths.
 
 Plain count mode:
 
@@ -156,7 +166,7 @@ Columns:
 file_age_days	file_path
 ```
 
-Plain mode writes no stdout when no older files are found. Scan warnings still go to stderr:
+When no older files are found, plain mode writes no stdout. Warnings go to stderr:
 
 ```text
 WARN	/path/to/missing	lstat /path/to/missing: no such file or directory
@@ -176,13 +186,13 @@ Or pass explicit directories:
 dirsquat --days 7 ~/Downloads ~/Desktop
 ```
 
-Missing or unreadable directories print a `WARN` panel and scanning continues. Argument errors print an `ERROR` panel and exit with code `2`.
+Missing or unreadable directories print `WARN` and scanning continues. Argument errors print `ERROR` and exit with code `2`.
 
 ## Scanning Rules
 
 `dirsquat` scans recursively by default.
 
-Files and directories with names beginning with `.` are hidden. Hidden files are not reported, and hidden directories are not entered.
+Files and directories beginning with `.` are skipped.
 
 Symlinked directories are not entered by default:
 
@@ -196,7 +206,7 @@ Use `--follow-symlinks` to include symlinked directories:
 dirsquat --follow-symlinks ~/Downloads
 ```
 
-Directory loops reached through symlinks are skipped.
+Symlink loops are skipped.
 
 ## Options
 
@@ -205,6 +215,7 @@ Directory loops reached through symlinks are skipped.
 --count              show counts and oldest age by directory
 --names              show file paths and ages
 --plain              show tab-separated output for automation
+--setup              build a shell startup command
 --follow-symlinks    enter symlinked directories
 --help               show help
 --version            show version
@@ -216,7 +227,7 @@ Passing any directory argument replaces the default `~/Downloads` target.
 
 ## Development
 
-Run the checks used by CI:
+Run checks:
 
 ```sh
 gofmt -w .
@@ -224,5 +235,3 @@ go test ./...
 go vet ./...
 go build -o dirsquat .
 ```
-
-CI runs those checks on Linux and macOS and cross-builds `linux/amd64`, `linux/arm64`, `darwin/amd64`, and `darwin/arm64`.
