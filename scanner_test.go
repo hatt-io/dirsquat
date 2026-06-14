@@ -135,6 +135,47 @@ func TestNamesModeWorks(t *testing.T) {
 	}
 }
 
+func TestPlainCountModeUsesExactTabSeparatedFields(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "path with spaces")
+	writeTestFile(t, dir, "one.txt", testNow.AddDate(0, 0, -8))
+	writeTestFile(t, dir, "two.txt", testNow.AddDate(0, 0, -9))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := run([]string{"--plain", "--count", dir}, &stdout, &stderr, testNow)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d with stderr %q", code, stderr.String())
+	}
+	if stdout.String() != "2\t9\t"+dir+"\n" {
+		t.Fatalf("unexpected stdout %q", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestPlainNamesModeUsesExactTabSeparatedFields(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "path with spaces")
+	old := writeTestFile(t, dir, "old file.txt", testNow.AddDate(0, 0, -8))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := run([]string{"--plain", "--names", dir}, &stdout, &stderr, testNow)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d with stderr %q", code, stderr.String())
+	}
+	if stdout.String() != "8\t"+old+"\n" {
+		t.Fatalf("unexpected stdout %q", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
 func TestCountModeConfirmsWhenNoOlderFiles(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, dir, "new.txt", testNow.AddDate(0, 0, -2))
@@ -171,6 +212,25 @@ func TestNamesModeConfirmsWhenNoOlderFiles(t *testing.T) {
 	}
 }
 
+func TestPlainModeStaysQuietWhenNoOlderFiles(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "new.txt", testNow.AddDate(0, 0, -2))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := run([]string{"--plain", "--names", dir}, &stdout, &stderr, testNow)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d with stderr %q", code, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
 func TestMissingDirectoryHandlingWorks(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 
@@ -184,6 +244,22 @@ func TestMissingDirectoryHandlingWorks(t *testing.T) {
 	requireOutputContains(t, stdout.String(), "D I R S Q U A T", "CLEAR", "No files need attention.")
 	requireOutputExcludes(t, stdout.String(), "threshold", "OLDER FILES")
 	requireOutputContains(t, stderr.String(), "D I R S Q U A T", "WARN", "ISSUES", "    1", displayPath(missing))
+}
+
+func TestPlainMissingDirectoryWarningUsesExactTabSeparatedFields(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing path")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := run([]string{"--plain", "--count", missing}, &stdout, &stderr, testNow)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	requireOutputContains(t, stderr.String(), "WARN\t"+missing+"\t")
 }
 
 func TestUnreadableDirectoryHandlingWorks(t *testing.T) {

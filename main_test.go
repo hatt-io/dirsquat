@@ -75,7 +75,7 @@ func TestHelpWorks(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
-	for _, want := range []string{"D I R S Q U A T", "HELP", "USAGE", "DEFAULTS", "days       7", "directory  ~/Downloads", "CLEAR", "FOUND", "WARN", "ERROR", "--count", "--names", "--follow-symlinks", "--help", "--version"} {
+	for _, want := range []string{"D I R S Q U A T", "HELP", "USAGE", "DEFAULTS", "days       7", "directory  ~/Downloads", "CLEAR", "FOUND", "WARN", "ERROR", "--count", "--names", "--plain", "--follow-symlinks", "--help", "--version"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("help output missing %q:\n%s", want, stdout.String())
 		}
@@ -94,6 +94,23 @@ func TestVersionWorks(t *testing.T) {
 	requireOutputContains(t, stdout.String(), "D I R S Q U A T", "VERSION", version)
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestPlainArgumentErrorsAreTabSeparated(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := run([]string{"--plain", "--days", "0"}, &stdout, &stderr, testNow)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if stderr.String() != "ERROR\t--days must be a positive integer\n" {
+		t.Fatalf("unexpected stderr %q", stderr.String())
 	}
 }
 

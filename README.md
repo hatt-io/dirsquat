@@ -1,44 +1,8 @@
 # dirsquat
 
-`dirsquat` is a small Go command-line tool for macOS and Linux. It is designed to run from `.zshrc`, `.bashrc`, or another shell startup file and report visible files that are older than a configured number of days.
+`dirsquat` reports visible files that are older than a chosen number of days. It is a small Go CLI for macOS and Linux, designed to run from `.zshrc`, `.bashrc`, or another shell startup file.
 
-By default, it scans `~/Downloads` and reports files older than 7 days. It scans recursively. Output uses a heavy terminal banner with `CLEAR`, `FOUND`, `WARN`, and `ERROR` states so it is easy to spot in a new shell window. Ages are based on each file's modification time, which is available on both macOS and Linux.
-
-## What It Never Does
-
-`dirsquat` only reports. It never moves, deletes, renames, archives, modifies, opens, or touches files. It does not run as a daemon, watch the filesystem, send desktop notifications, use a database, store state, or read a config file.
-
-## Build And Install
-
-`dirsquat` builds with Go 1.25 or newer.
-
-Build locally:
-
-```sh
-go build -o dirsquat .
-```
-
-Build with an explicit version string:
-
-```sh
-go build -ldflags="-X main.version=0.1.0" -o dirsquat .
-```
-
-Install the built executable somewhere on your `PATH`:
-
-```sh
-install -m 0755 dirsquat /usr/local/bin/dirsquat
-```
-
-Or install directly with Go:
-
-```sh
-go install github.com/hatt-io/dirsquat@latest
-```
-
-## Usage
-
-Run with defaults:
+Default behavior:
 
 ```sh
 dirsquat
@@ -50,7 +14,49 @@ That is equivalent to:
 dirsquat --days 7 ~/Downloads
 ```
 
-Scan specific directories with the default 7-day cutoff:
+Ages are based on file modification time, which is available on both macOS and Linux.
+
+## Safety
+
+`dirsquat` only reports. It never moves, deletes, renames, archives, modifies, opens, or touches files.
+
+It also does not run as a daemon, watch the filesystem, send desktop notifications, use a database, store state, read a config file, print JSON, or use color output.
+
+## Install
+
+Build locally:
+
+```sh
+go build -o dirsquat .
+```
+
+Install the binary somewhere on your `PATH`:
+
+```sh
+install -m 0755 dirsquat /usr/local/bin/dirsquat
+```
+
+Or install directly with Go:
+
+```sh
+go install github.com/hatt-io/dirsquat@latest
+```
+
+Build with an explicit version string:
+
+```sh
+go build -ldflags="-X main.version=0.1.0" -o dirsquat .
+```
+
+## Quick Usage
+
+Scan the default directory with the default 7-day cutoff:
+
+```sh
+dirsquat
+```
+
+Scan specific directories:
 
 ```sh
 dirsquat ~/Downloads ~/Desktop
@@ -62,14 +68,19 @@ Use a different day cutoff:
 dirsquat --days 14 ~/Downloads ~/Desktop
 ```
 
-By default, `dirsquat` uses count mode. Count mode shows the number of older files in each directory and the age of the oldest file found there:
+Paths with spaces work as normal shell arguments:
 
 ```sh
-dirsquat --count
-dirsquat --days 7 --count ~/Downloads ~/Desktop
+dirsquat --days 14 --names "$HOME/Project Notes"
 ```
 
-Example output:
+## Human Output
+
+Count mode is the default. It shows one row per directory with older files:
+
+```sh
+dirsquat --count ~/Downloads ~/Desktop
+```
 
 ```text
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
@@ -81,24 +92,11 @@ Example output:
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
 
-If no files match:
-
-```text
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ D I R S Q U A T                                       CLEAR ┃
-┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
-┃ No files need attention.                                    ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-```
-
-Use names mode to print each matching file path with that file's age:
+Names mode shows each older file:
 
 ```sh
-dirsquat --names
-dirsquat --days 7 --names ~/Downloads ~/Desktop
+dirsquat --names ~/Downloads ~/Desktop
 ```
-
-Example output:
 
 ```text
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
@@ -110,15 +108,63 @@ Example output:
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
 
-Paths with spaces work when passed as normal shell arguments:
+When no older files are found, human output confirms that clearly:
+
+```text
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ D I R S Q U A T                                       CLEAR ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ No files need attention.                                    ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
+
+## Automation And Agents
+
+Use `--plain` when another program or AI agent needs to consume the output. Plain mode is tab-separated, uses exact paths, and never shortens paths with an ellipsis.
+
+Plain count mode:
 
 ```sh
-dirsquat --days 14 --names "$HOME/Project Notes"
+dirsquat --plain --count ~/Downloads ~/Desktop
+```
+
+```text
+12	92	/path/to/Downloads
+2	18	/path/to/Desktop
+```
+
+Columns:
+
+```text
+file_count	oldest_file_age_days	directory
+```
+
+Plain names mode:
+
+```sh
+dirsquat --plain --names ~/Downloads ~/Desktop
+```
+
+```text
+18	/path/to/Downloads/report.pdf
+92	/path/to/Desktop/archive.zip
+```
+
+Columns:
+
+```text
+file_age_days	file_path
+```
+
+Plain mode writes no stdout when no older files are found. Scan warnings still go to stderr:
+
+```text
+WARN	/path/to/missing	lstat /path/to/missing: no such file or directory
 ```
 
 ## Shell Startup
 
-Add a command like this to `.zshrc`:
+Add this to `.zshrc` or `.bashrc`:
 
 ```sh
 dirsquat
@@ -130,46 +176,15 @@ Or pass explicit directories:
 dirsquat --days 7 ~/Downloads ~/Desktop
 ```
 
-Add a command like this to `.bashrc`:
+Missing or unreadable directories print a `WARN` panel and scanning continues. Argument errors print an `ERROR` panel and exit with code `2`.
 
-```sh
-dirsquat
-```
+## Scanning Rules
 
-Missing or unreadable directories print a `WARN` panel and scanning continues. Argument errors, such as an invalid `--days` value, print an `ERROR` panel and fail clearly.
+`dirsquat` scans recursively by default.
 
-## Defaults
+Files and directories with names beginning with `.` are hidden. Hidden files are not reported, and hidden directories are not entered.
 
-`dirsquat` defaults to:
-
-```text
---days 7
-DIR: ~/Downloads
-```
-
-Passing any directory argument replaces the default `~/Downloads` target.
-
-## Modes
-
-Count mode prints one line per directory that has matching files. Each line includes the age of the oldest matching file in that directory:
-
-```sh
-dirsquat --count
-dirsquat --days 7 --count ~/Downloads ~/Desktop
-```
-
-If neither `--count` nor `--names` is passed, count mode is used.
-
-Names mode prints each matching file path with that file's age:
-
-```sh
-dirsquat --names
-dirsquat --days 7 --names ~/Downloads ~/Desktop
-```
-
-## Symlinked Directories
-
-By default, `dirsquat` does not enter symlinked directories:
+Symlinked directories are not entered by default:
 
 ```sh
 dirsquat ~/Downloads
@@ -183,20 +198,21 @@ dirsquat --follow-symlinks ~/Downloads
 
 Directory loops reached through symlinks are skipped.
 
-## Hidden Files And Directories
-
-Files and directories with names beginning with `.` are hidden. `dirsquat` does not report hidden files and does not enter hidden directories.
-
 ## Options
 
 ```text
 --days N             report files older than N days
 --count              show counts and oldest age by directory
 --names              show file paths and ages
+--plain              show tab-separated output for automation
 --follow-symlinks    enter symlinked directories
 --help               show help
 --version            show version
 ```
+
+If neither `--count` nor `--names` is passed, count mode is used.
+
+Passing any directory argument replaces the default `~/Downloads` target.
 
 ## Development
 

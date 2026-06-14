@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -177,4 +178,8 @@ func (r *ScanResult) addWarning(path string, err error) {
 		Path: path,
 		Err:  err,
 	})
+}
+
+func isHiddenName(name string) bool {
+	return name != "." && name != ".." && strings.HasPrefix(name, ".")
 }
