@@ -26,6 +26,8 @@ type setupSession struct {
 	closed bool
 }
 
+var errSetupCancelled = errors.New("setup cancelled")
+
 func runSetup(stdin io.Reader, stdout, stderr io.Writer, defaults cliOptions) int {
 	session := setupSession{
 		in:  bufio.NewReader(stdin),
@@ -41,99 +43,144 @@ func runSetup(stdin io.Reader, stdout, stderr io.Writer, defaults cliOptions) in
 	}
 
 	writeSetupIntro(stdout)
-	config.roots = session.askDirectories(config.roots)
-	config.days = session.askDays(config.days)
-	config.mode = session.askMode(config.mode)
-	config.followSymlinks = session.askBool("4/5 SYMLINKS", "Follow symlinked directories", config.followSymlinks)
-	config.plain = session.askBool("5/5 AUTOMATION", "Use plain output for scripts or agents", config.plain)
+	config.roots = session.askDirectories(config.roots, 1, 5)
+	if code, stopped := finishSetupIfStopped(session, stdout, stderr, defaults.plain); stopped {
+		return code
+	}
+	config.days = session.askDays(config.days, 2, 5)
+	if code, stopped := finishSetupIfStopped(session, stdout, stderr, defaults.plain); stopped {
+		return code
+	}
+	config.mode = session.askMode(config.mode, 3, 5)
+	if code, stopped := finishSetupIfStopped(session, stdout, stderr, defaults.plain); stopped {
+		return code
+	}
+	config.followSymlinks = session.askBool(4, 5, "Follow symlinked directories", config.followSymlinks)
+	if code, stopped := finishSetupIfStopped(session, stdout, stderr, defaults.plain); stopped {
+		return code
+	}
+	config.plain = session.askBool(5, 5, "Use plain output for scripts or agents", config.plain)
 
-	if session.err != nil {
-		writeCLIError(stderr, session.err, defaults.plain)
+	if code, stopped := finishSetupIfStopped(session, stdout, stderr, defaults.plain); stopped {
+		return code
+	}
+
+	command := buildSetupCommand(config)
+	writeSetupReady(stdout, command)
+
+	if !session.askBoolPrompt("Run automatically in new terminals", false) {
+		if code, stopped := finishSetupIfStopped(session, stdout, stderr, defaults.plain); stopped {
+			return code
+		}
+		return 0
+	}
+
+	target := detectSetupShellTarget(os.Getenv("SHELL"))
+	writeSetupShellTarget(stdout, target)
+	startupFile := session.askStartupFile(target.Path)
+
+	if code, stopped := finishSetupIfStopped(session, stdout, stderr, defaults.plain); stopped {
+		return code
+	}
+
+	result, err := installSetupCommand(startupFile, command)
+	if err != nil {
+		writeSetupError(stderr, err, defaults.plain)
 		return 1
 	}
 
-	writeSetupReady(stdout, buildSetupCommand(config))
+	writeSetupInstalled(stdout, result)
+	if err := sourceStartupFile(target, result.Path, stdout, stderr); err != nil {
+		writeSetupSourceFailed(stderr, result.DisplayPath, err)
+		return 1
+	}
+	writeSetupSourced(stdout, result.DisplayPath)
 	return 0
 }
 
 func writeSetupIntro(w io.Writer) {
-	writeCard(w, "SETUP", "shell startup command builder", [][]string{
+	writeCard(w, "SETUP", "command builder", [][]string{
 		{
-			"WHAT THIS DOES",
-			"  Builds a dirsquat command for .zshrc or .bashrc.",
-			"  Answer a few prompts, then copy the command.",
-		},
-		{
-			"TIP",
-			"  Press Enter to accept a default.",
+			"Create a reusable dirsquat command.",
+			"Run it anytime, or run it automatically in new terminals.",
+			"Press Enter to keep a default.",
+			"Type q to quit.",
 		},
 	})
 }
 
-func (s *setupSession) askDirectories(defaults []string) []string {
-	writeSetupStep(s.out, "1/5 DIRECTORIES", []string{
-		"Enter directories separated by commas.",
-		"Paths with spaces are fine.",
-	})
-
-	value := s.prompt("Directories", strings.Join(defaults, ", "))
+func (s *setupSession) askDirectories(defaults []string, step int, total int) []string {
+	value := s.prompt(setupPromptLabel(step, total, "Directories"), strings.Join(defaults, ", "))
+	if s.err != nil {
+		return defaults
+	}
 	return parseSetupDirectories(value, defaults)
 }
 
-func (s *setupSession) askDays(defaultDays int) int {
-	writeSetupStep(s.out, "2/5 AGE", []string{
-		"Report files older than this many days.",
-	})
-
+func (s *setupSession) askDays(defaultDays int, step int, total int) int {
 	for {
-		value := s.prompt("Days", strconv.Itoa(defaultDays))
+		value := s.prompt(setupPromptLabel(step, total, "Days"), strconv.Itoa(defaultDays))
+		if s.err != nil {
+			return defaultDays
+		}
 		days, err := parseDays(value)
 		if err == nil {
 			return days
 		}
-		writeSetupNote(s.out, "Use a positive whole number.")
+		fmt.Fprintln(s.out, "  Use a positive whole number.")
 	}
 }
 
-func (s *setupSession) askMode(defaultMode outputMode) outputMode {
-	writeSetupStep(s.out, "3/5 OUTPUT", []string{
-		"1  Count files by directory",
-		"2  List each file path",
-	})
-
+func (s *setupSession) askMode(defaultMode outputMode, step int, total int) outputMode {
+	fmt.Fprintln(s.out, "  1  Count files by directory")
+	fmt.Fprintln(s.out, "  2  List each file path")
 	for {
-		value := strings.ToLower(s.prompt("Mode", setupModeLabel(defaultMode)))
+		value := strings.ToLower(s.prompt(setupPromptLabel(step, total, "Mode"), setupModeLabel(defaultMode)))
+		if s.err != nil {
+			return defaultMode
+		}
 		switch value {
 		case "1", "count", "counts", "c":
 			return modeCount
 		case "2", "names", "name", "files", "n":
 			return modeNames
 		default:
-			writeSetupNote(s.out, "Choose 1/count or 2/names.")
+			fmt.Fprintln(s.out, "  Choose 1/count or 2/names.")
 		}
 	}
 }
 
-func (s *setupSession) askBool(title string, label string, defaultValue bool) bool {
-	writeSetupStep(s.out, title, []string{
-		label,
-	})
+func (s *setupSession) askBool(step int, total int, label string, defaultValue bool) bool {
+	return s.askBoolPrompt(setupPromptLabel(step, total, label), defaultValue)
+}
 
+func (s *setupSession) askBoolPrompt(label string, defaultValue bool) bool {
 	for {
 		value := strings.ToLower(s.prompt(label, setupBoolLabel(defaultValue)))
+		if s.err != nil {
+			return defaultValue
+		}
 		switch value {
 		case "y", "yes", "true", "1":
 			return true
 		case "n", "no", "false", "0":
 			return false
 		default:
-			writeSetupNote(s.out, "Choose yes or no.")
+			fmt.Fprintln(s.out, "  Choose yes or no.")
 		}
 	}
 }
 
+func (s *setupSession) askStartupFile(defaultPath string) string {
+	return s.prompt("File to update", defaultPath)
+}
+
 func (s *setupSession) prompt(label string, defaultValue string) string {
 	fmt.Fprintf(s.out, "%s [%s]> ", label, defaultValue)
+	if s.err != nil {
+		fmt.Fprintln(s.out)
+		return defaultValue
+	}
 	if s.closed {
 		fmt.Fprintln(s.out)
 		return defaultValue
@@ -144,6 +191,7 @@ func (s *setupSession) prompt(label string, defaultValue string) string {
 		if errors.Is(err, io.EOF) {
 			s.closed = true
 			if line == "" {
+				s.err = errSetupCancelled
 				fmt.Fprintln(s.out)
 				return defaultValue
 			}
@@ -159,42 +207,149 @@ func (s *setupSession) prompt(label string, defaultValue string) string {
 	}
 
 	value := strings.TrimSpace(line)
+	if isSetupQuit(value) {
+		s.err = errSetupCancelled
+		return defaultValue
+	}
 	if value == "" {
 		return defaultValue
 	}
 	return value
 }
 
-func writeSetupStep(w io.Writer, title string, lines []string) {
-	section := append([]string{title}, indentSetupLines(lines)...)
-	writeCard(w, "SETUP", "", [][]string{section})
-}
-
-func writeSetupNote(w io.Writer, message string) {
-	writeCard(w, "SETUP", "check input", [][]string{
-		{
-			"NOTE",
-			"  " + message,
-		},
-	})
+func finishSetupIfStopped(session setupSession, stdout, stderr io.Writer, plain bool) (int, bool) {
+	if session.err == nil {
+		return 0, false
+	}
+	if errors.Is(session.err, errSetupCancelled) {
+		writeSetupCancelled(stdout)
+		return 0, true
+	}
+	writeSetupError(stderr, session.err, plain)
+	return 1, true
 }
 
 func writeSetupReady(w io.Writer, command string) {
-	writeCard(w, "READY", "copy into your shell startup file", [][]string{
+	writeCard(w, "READY", "copy or run this command", [][]string{
 		{
 			"COMMAND",
-			"  Add this line to .zshrc or .bashrc.",
+			"  Run it now, or save it for new terminals.",
 		},
 	})
 	fmt.Fprintf(w, "\n%s\n\n", command)
 }
 
-func indentSetupLines(lines []string) []string {
-	indented := make([]string, 0, len(lines))
-	for _, line := range lines {
-		indented = append(indented, "  "+line)
+func writeSetupShellTarget(w io.Writer, target setupShellTarget) {
+	writeCard(w, "STARTUP", "automatic runs", [][]string{
+		{
+			"DETECTED SHELL",
+			"  " + target.Name,
+		},
+		{
+			"FILE TO UPDATE",
+			"  " + target.Path,
+		},
+	})
+}
+
+func writeSetupInstalled(w io.Writer, result setupInstallResult) {
+	status := "Startup file updated."
+	if result.Unchanged {
+		status = "Startup file already had this command."
 	}
-	return indented
+
+	writeCard(w, "DONE", "one dirsquat command is active", [][]string{
+		{
+			"FILE",
+			"  " + result.DisplayPath,
+		},
+		{
+			"RESULT",
+			"  " + status,
+		},
+	})
+}
+
+func writeSetupSourced(w io.Writer, displayPath string) {
+	writeCard(w, "RAN NOW", "startup command ran once", [][]string{
+		{
+			"FILE",
+			"  " + displayPath,
+		},
+	})
+}
+
+func writeSetupCancelled(w io.Writer) {
+	writeCard(w, "CANCELLED", "no changes made", [][]string{
+		{
+			"Setup stopped.",
+		},
+	})
+}
+
+func writeSetupSourceFailed(w io.Writer, displayPath string, err error) {
+	writeCard(w, "WARN", "could not run the startup file now", [][]string{
+		{
+			"FILE",
+			"  " + displayPath,
+		},
+		setupMessageSection("ISSUE", err.Error()),
+		{
+			"NEXT",
+			"  Open a new terminal, or check the file above.",
+		},
+	})
+}
+
+func writeSetupError(w io.Writer, err error, plain bool) {
+	if plain {
+		writePlainError(w, err)
+		return
+	}
+	writeCard(w, "ERROR", "setup stopped", [][]string{
+		setupMessageSection("ISSUE", err.Error()),
+	})
+}
+
+func setupPromptLabel(step int, total int, label string) string {
+	return fmt.Sprintf("%d/%d %s", step, total, label)
+}
+
+func setupMessageSection(title string, message string) []string {
+	lines := []string{title}
+	for _, line := range wrapSetupMessage(message, 58) {
+		lines = append(lines, "  "+line)
+	}
+	return lines
+}
+
+func wrapSetupMessage(message string, width int) []string {
+	words := strings.Fields(message)
+	if len(words) == 0 {
+		return []string{""}
+	}
+
+	lines := make([]string, 0, 1)
+	current := words[0]
+	for _, word := range words[1:] {
+		if runeLen(current)+1+runeLen(word) > width {
+			lines = append(lines, current)
+			current = word
+			continue
+		}
+		current += " " + word
+	}
+	lines = append(lines, current)
+	return lines
+}
+
+func isSetupQuit(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "q", "quit", "exit":
+		return true
+	default:
+		return false
+	}
 }
 
 func setupDefaultRoots(roots []string) []string {
@@ -279,7 +434,7 @@ func buildSetupCommand(config setupConfig) string {
 }
 
 func shellQuotePath(path string) string {
-	if strings.HasPrefix(path, "$HOME") {
+	if path == "$HOME" || strings.HasPrefix(path, "$HOME/") {
 		return `"` + strings.ReplaceAll(path, `"`, `\"`) + `"`
 	}
 	return "'" + strings.ReplaceAll(path, "'", "'\\''") + "'"

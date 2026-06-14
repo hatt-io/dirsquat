@@ -1,6 +1,6 @@
 # dirsquat
 
-`dirsquat` is a shell-startup reminder for old files. Run it from `.zshrc`, `.bashrc`, or another shell startup file and it reports files older than your cutoff.
+`dirsquat` reports files older than your cutoff. Run it manually, or add it to shell startup for a reminder when a new terminal starts.
 
 By default, it checks `~/Downloads` for files older than 7 days:
 
@@ -9,6 +9,8 @@ dirsquat
 ```
 
 Ages are based on file modification time.
+
+Normal scans only report. They do not move, delete, rename, archive, or edit files. `--setup` only writes to the shell startup file after you confirm.
 
 ## Install
 
@@ -64,11 +66,13 @@ dirsquat --days 14 --names "$HOME/Project Notes"
 
 ## Setup Wizard
 
-Use `--setup` to build a shell startup command interactively:
+Use `--setup` to build a reusable command interactively:
 
 ```sh
 dirsquat --setup
 ```
+
+Press Enter to keep a default. Type `q`, `quit`, or `exit` to stop setup without changing anything.
 
 Setup prompts for:
 
@@ -77,12 +81,17 @@ Setup prompts for:
 - count mode or names mode
 - whether to follow symlinked directories
 - whether to use plain output for scripts or agents
+- whether to run the command automatically in new terminals
 
-It prints a command you can add to `.zshrc` or `.bashrc`:
+It prints a command you can run immediately:
 
 ```sh
 dirsquat --days 7 --count "$HOME/Downloads" "$HOME/Desktop"
 ```
+
+If you choose automatic runs, setup detects zsh, bash, or fish and suggests the usual file to update. It writes one managed `dirsquat` block, then runs that file once so the command starts working immediately.
+
+Re-running setup updates the managed block instead of appending another one. If setup finds an older standalone `dirsquat` startup line outside that block, it removes that line first so only one `dirsquat` command remains. If a line has `dirsquat` together with other commands, setup stops and tells you which line to edit by hand.
 
 ## Human Output
 
@@ -174,7 +183,7 @@ WARN	/path/to/missing	lstat /path/to/missing: no such file or directory
 
 ## Shell Startup
 
-Add this to `.zshrc` or `.bashrc`:
+Add this to `.zshrc`, `.bashrc`, or `config.fish`:
 
 ```sh
 dirsquat
@@ -215,7 +224,7 @@ Symlink loops are skipped.
 --count              show counts and oldest age by directory
 --names              show file paths and ages
 --plain              show tab-separated output for automation
---setup              build a shell startup command
+--setup              build and optionally install a command
 --follow-symlinks    enter symlinked directories
 --help               show help
 --version            show version
@@ -230,7 +239,7 @@ Passing any directory argument replaces the default `~/Downloads` target.
 Run checks:
 
 ```sh
-gofmt -w .
+gofmt -w *.go
 go test ./...
 go vet ./...
 go build -o dirsquat .

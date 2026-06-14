@@ -85,7 +85,7 @@ func printUsage(w io.Writer) {
 			"  --count              show counts and oldest age by directory",
 			"  --names              show file paths and ages",
 			"  --plain              show tab-separated output for automation",
-			"  --setup              build a shell startup command",
+			"  --setup              build and optionally install a command",
 			"  --follow-symlinks    enter symlinked directories",
 			"  --help               show this help",
 			"  --version            show version",
